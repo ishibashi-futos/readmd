@@ -3,7 +3,9 @@
   "module": "src/lib.ts",
   "type": "module",
   "scripts": {
-    "format": "biome format --write ."
+    "format": "biome format --write .",
+    "demo": "cat README.md | bun run src/cli.ts --stream true",
+    "demo:non-stream": "bun run src/cli.ts ./README.md --stream false"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.4.4",

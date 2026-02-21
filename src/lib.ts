@@ -18,7 +18,33 @@ interface ParserState {
   inCodeBlock: boolean;
 }
 
-// 2. 行単位のパース（変更なし）
+function applyInlineFormatting(line: string, resetTailStyle?: string): string {
+  const codeSpans: string[] = [];
+  const codeTokenPrefix = "\u0000CODESPAN";
+  const protectedLine = line.replace(/`([^`]+)`/g, (_, code: string) => {
+    const idx = codeSpans.push(code) - 1;
+    return `${codeTokenPrefix}${idx}\u0000`;
+  });
+
+  let parsed = protectedLine;
+  parsed = parsed.replace(
+    /(\*\*|__)(.*?)\1/g,
+    `${ANSI.bold}${ANSI.yellow}$2${ANSI.reset}`,
+  );
+  parsed = parsed.replace(/(\*|_)(.*?)\1/g, `${ANSI.gray}$2${ANSI.reset}`);
+  parsed = parsed.replace(/~~(.*?)~~/g, `${ANSI.strike}$1${ANSI.reset}`);
+  parsed = parsed.replace(/\u0000CODESPAN(\d+)\u0000/g, (_, idx: string) => {
+    const code = codeSpans[Number(idx)] ?? "";
+    return `${ANSI.magenta}${code}${ANSI.reset}`;
+  });
+
+  if (resetTailStyle) {
+    parsed = parsed.replaceAll(ANSI.reset, `${ANSI.reset}${resetTailStyle}`);
+  }
+
+  return parsed;
+}
+
 function parseLine(line: string, state: ParserState): string {
   if (line.trim().startsWith("```")) {
     state.inCodeBlock = !state.inCodeBlock;
@@ -33,35 +59,26 @@ function parseLine(line: string, state: ParserState): string {
     const text = headingMatch[2];
 
     if (level === 1) {
-      // H1 (#): 背景青 ＋ 白文字 ＋ 太字 （前後に改行を入れて目立たせる）
-      return `\n${ANSI.bgBlue}${ANSI.white}${ANSI.bold} ${text} ${ANSI.reset}\n`;
+      // H1 (#): 背景青 ＋ 白文字 ＋ 太字
+      return `${ANSI.bgBlue}${ANSI.white}${ANSI.bold} ${text} ${ANSI.reset}\n`;
     } else if (level === 2) {
       // H2 (##): シアン ＋ 太字 ＋ 下線
-      return `\n${ANSI.cyan}${ANSI.bold}${ANSI.underline}${text}${ANSI.reset}\n`;
+      return `${ANSI.cyan}${ANSI.bold}${ANSI.underline}${text}${ANSI.reset}\n`;
     } else {
       // H3以降 (###〜): 青 ＋ 太字
-      return `${ANSI.blue}${ANSI.bold}${"#".repeat(level)} ${text}${ANSI.reset}\n`;
+      return `${ANSI.blue}${ANSI.bold}${text}${ANSI.reset}\n`;
     }
   }
 
-  if (line.trim().startsWith("- ") || line.trim().startsWith("* ")) {
-    return line.replace(/^(\s*[-*]\s+)(.*)/, `$1${ANSI.cyan}$2${ANSI.reset}\n`);
+  const listMatch = line.match(/^(\s*[-*]\s+)(.*)$/);
+  if (listMatch) {
+    const prefix = listMatch[1];
+    const content = listMatch[2] ?? "";
+    const formattedContent = applyInlineFormatting(content, ANSI.cyan);
+    return `${prefix}${ANSI.cyan}${formattedContent}${ANSI.reset}\n`;
   }
 
-  let parsed = line.replace(
-    /\*\*(.*?)\*\*/g,
-    `${ANSI.bold}${ANSI.yellow}$1${ANSI.reset}`,
-  );
-  // インライン要素の処理
-  parsed = parsed.replace(
-    /(\*\*|__)(.*?)\1/g,
-    `${ANSI.bold}${ANSI.yellow}$2${ANSI.reset}`,
-  );
-  parsed = parsed.replace(/(\*|_)(.*?)\1/g, `${ANSI.gray}$2${ANSI.reset}`);
-  parsed = parsed.replace(/~~(.*?)~~/g, `${ANSI.strike}$1${ANSI.reset}`);
-  parsed = parsed.replace(/`([^`]+)`/g, `${ANSI.magenta}$1${ANSI.reset}`);
-
-  return parsed + "\n";
+  return applyInlineFormatting(line) + "\n";
 }
 
 export function* createMarkdown(text: string) {
@@ -78,22 +95,43 @@ function getRandomDelay(min: number, max: number): number {
   return Math.floor(Math.random() * (max - min + 1)) + min;
 }
 
+function validateDelayRange(minDelay: number, maxDelay: number): void {
+  if (!Number.isFinite(minDelay) || !Number.isFinite(maxDelay)) {
+    throw new RangeError("Delay values must be finite numbers.");
+  }
+  if (minDelay < 0 || maxDelay < 0) {
+    throw new RangeError("Delay values must be >= 0.");
+  }
+  if (minDelay > maxDelay) {
+    throw new RangeError("minDelay must be less than or equal to maxDelay.");
+  }
+}
+
 export async function* createMarkdownStream(
   text: string,
   minDelay: number = 10,
   maxDelay: number = 40, // Rangeの最大値
 ) {
+  validateDelayRange(minDelay, maxDelay);
   const lineGenerator = createMarkdown(text);
 
   for (const line of lineGenerator) {
-    let isAnsiSequence = false;
-    for (const char of line) {
+    let i = 0;
+    while (i < line.length) {
+      const char = line[i]!;
       yield char;
 
-      if (char === "\x1b") isAnsiSequence = true;
-      if (isAnsiSequence) {
-        if (char === "m") isAnsiSequence = false; // シーケンス終了
-        continue; // ANSI処理中は sleep せず次の文字へ
+      if (char === "\x1b") {
+        const remaining = line.slice(i);
+        const sgrMatch = remaining.match(/^\x1b\[[0-9;]*m/);
+        if (sgrMatch) {
+          const sequence = sgrMatch[0];
+          for (let j = 1; j < sequence.length; j++) {
+            yield sequence[j]!;
+          }
+          i += sequence.length;
+          continue;
+        }
       }
 
       let currentDelay = getRandomDelay(minDelay, maxDelay);
@@ -103,6 +141,7 @@ export async function* createMarkdownStream(
         currentDelay += getRandomDelay(50, 100);
       }
       await sleep(currentDelay);
+      i += 1;
     }
   }
 }

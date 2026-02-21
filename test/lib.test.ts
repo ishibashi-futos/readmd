@@ -84,6 +84,71 @@ describe("createMarkdown", () => {
     expect(line).not.toContain("`code`");
   });
 
+  it("keeps list color formatting after inline italic in the same item", () => {
+    const [line] = collectLines("- *italic* tail");
+    const cyan = "\x1b[36m";
+    const reset = "\x1b[0m";
+    const tailSegment = " tail";
+    const tailStart = line!.indexOf(tailSegment);
+
+    expect(tailStart).toBeGreaterThan(0);
+
+    const beforeTail = line!.slice(0, tailStart);
+    const lastCyanBeforeTail = beforeTail.lastIndexOf(cyan);
+    const lastResetBeforeTail = beforeTail.lastIndexOf(reset);
+
+    // List item style should continue after closing italic styling.
+    expect(lastCyanBeforeTail).toBeGreaterThan(lastResetBeforeTail);
+  });
+
+  it("keeps list color formatting after inline bold in the same item", () => {
+    const [line] = collectLines("- **bold** tail");
+    const cyan = "\x1b[36m";
+    const reset = "\x1b[0m";
+    const tailSegment = " tail";
+    const tailStart = line!.indexOf(tailSegment);
+
+    expect(tailStart).toBeGreaterThan(0);
+
+    const beforeTail = line!.slice(0, tailStart);
+    const lastCyanBeforeTail = beforeTail.lastIndexOf(cyan);
+    const lastResetBeforeTail = beforeTail.lastIndexOf(reset);
+
+    expect(lastCyanBeforeTail).toBeGreaterThan(lastResetBeforeTail);
+  });
+
+  it("keeps list color formatting after inline code in the same item", () => {
+    const [line] = collectLines("- `code` tail");
+    const cyan = "\x1b[36m";
+    const reset = "\x1b[0m";
+    const tailSegment = " tail";
+    const tailStart = line!.indexOf(tailSegment);
+
+    expect(tailStart).toBeGreaterThan(0);
+
+    const beforeTail = line!.slice(0, tailStart);
+    const lastCyanBeforeTail = beforeTail.lastIndexOf(cyan);
+    const lastResetBeforeTail = beforeTail.lastIndexOf(reset);
+
+    expect(lastCyanBeforeTail).toBeGreaterThan(lastResetBeforeTail);
+  });
+
+  it("keeps list color formatting after strikethrough in the same item", () => {
+    const [line] = collectLines("- ~~strike~~ tail");
+    const cyan = "\x1b[36m";
+    const reset = "\x1b[0m";
+    const tailSegment = " tail";
+    const tailStart = line!.indexOf(tailSegment);
+
+    expect(tailStart).toBeGreaterThan(0);
+
+    const beforeTail = line!.slice(0, tailStart);
+    const lastCyanBeforeTail = beforeTail.lastIndexOf(cyan);
+    const lastResetBeforeTail = beforeTail.lastIndexOf(reset);
+
+    expect(lastCyanBeforeTail).toBeGreaterThan(lastResetBeforeTail);
+  });
+
   it("strips heading markers for level 3 and above", () => {
     const [line] = collectLines("### Level3");
     const plain = stripAnsi(line!);
