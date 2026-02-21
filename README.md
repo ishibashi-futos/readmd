@@ -1,4 +1,4 @@
-# Natural Stream Parser
+# readmd
 Welcome to the **Natural Markdown Stream Parser**. This is a custom CLI tool built entirely with __Bun__!
 
 It outputs text with a *typewriter-like* effect, making it feel like a human is typing in real-time.
