@@ -2,7 +2,11 @@
   "name": "readmd",
   "module": "src/lib.ts",
   "type": "module",
+  "bin": {
+    "readmd": "./src/cli.ts"
+  },
   "scripts": {
+    "build": "bun build src/cli.ts --compile --minify --bytecode --outfile dist/readmd",
     "format": "biome format --write .",
     "demo": "cat README.md | bun run src/cli.ts --stream true",
     "demo:non-stream": "bun run src/cli.ts ./README.md --stream false"

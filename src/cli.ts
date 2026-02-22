@@ -1,17 +1,29 @@
+#!/usr/bin/env bun
 import { createMarkdown, createMarkdownStream } from "./lib";
 import { readFile } from "node:fs/promises";
 
 type CliOptions = {
   filepath?: string;
-  speed: "fast" | "normal" | "slow";
+  speed: Speed;
   stream?: boolean;
   minDelay?: number;
   maxDelay?: number;
-  noDelay: boolean;
-  noColor: boolean;
   help: boolean;
   version: boolean;
 };
+
+type SpeedOption = {
+  min: number;
+  max: number;
+};
+
+type Speed = "fast" | "normal" | "slow";
+
+const SPEED_PRESET = {
+  fast: { min: 5, max: 15 },
+  normal: { min: 15, max: 40 },
+  slow: { min: 30, max: 80 },
+} as const satisfies Record<Speed, SpeedOption>;
 
 function parseArgs(args: string[]): CliOptions {
   const options: CliOptions = {
@@ -19,8 +31,6 @@ function parseArgs(args: string[]): CliOptions {
     speed: "normal",
     minDelay: undefined,
     maxDelay: undefined,
-    noDelay: false,
-    noColor: false,
     help: false,
     version: false,
     stream: true,
@@ -33,12 +43,8 @@ function parseArgs(args: string[]): CliOptions {
       options.help = true;
     } else if (arg === "-v" || arg === "--version") {
       options.version = true;
-    } else if (arg === "--no-delay") {
-      options.noDelay = true;
-    } else if (arg === "--no-color") {
-      options.noColor = true;
     } else if (arg === "-s" || arg === "--speed") {
-      options.speed = (args[++i] as any) || "normal";
+      options.speed = (args[++i] as Speed) || "normal";
     } else if (arg === "--min") {
       options.minDelay = parseInt(args[++i]!, 10);
     } else if (arg === "--max") {
@@ -77,8 +83,6 @@ Options:
   -s, --speed <type>   Typing speed (fast, normal, slow) [default: normal]
   --min <ms>           Minimum delay in milliseconds
   --max <ms>           Maximum delay in milliseconds
-  --no-delay           Disable typing animation (instant output)
-  --no-color           Disable ANSI color output
   -h, --help           Show help
   -v, --version        Show version
     `.trim(),
@@ -106,7 +110,15 @@ Options:
     }
 
     if (options.stream) {
-      const stream = createMarkdownStream(text, options.minDelay);
+      const { min, max } = SPEED_PRESET[options.speed];
+      let speedMin = options.minDelay ?? min;
+      let speedMax = options.maxDelay ?? max;
+
+      if (speedMin > speedMax) {
+        [speedMin, speedMax] = [speedMax, speedMin];
+      }
+
+      const stream = createMarkdownStream(text, speedMin, speedMax);
       for await (const chunk of stream) {
         process.stdout.write(chunk);
       }
